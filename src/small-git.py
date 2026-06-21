@@ -34,7 +34,7 @@ assert MY.name != MASTER_BRANCH
 
 def find_base(b0: git.Head = MY, b1: git.Head = MASTER):
     bases = REPO.merge_base(b0, b1)
-    assert len(bases) == 1
+    # assert len(bases) == 1
     return bases[0]
 
 
@@ -245,8 +245,25 @@ def rebase_to(c: git.Commit) -> bool:
         cmd.end()
         return True
 
+def reset_and_rebase(c: git.Commit, base: git.Commit) -> bool:
+    reset_to(base, is_soft=False, need_commit=True, need_push=False)
+    return rebase_to(c)
 
-def rebase_or_reset(c: git.Commit, base: git.Commit) -> bool:
+def merge():
+    cmd = Cmd.MERGE
+    cmd.start()
+    try:
+        MY.merge(MASTER)
+    except git.GitCommandError as e:
+        cmd.fail(e)
+        return False
+    else:
+        push()
+        cmd.end()
+        return True
+
+
+def rebase_or_conflict(c: git.Commit, base: git.Commit) -> bool:
     cmd = Cmd.REBASE
 
     if rebase_to(c):
@@ -265,6 +282,7 @@ def rebase_or_reset(c: git.Commit, base: git.Commit) -> bool:
         cmd.warn(f"Please resolve 💣 conflicts manually, then {Cmd.REBASE}")
         return False
     return True
+
 
 
 def fetch() -> None:
@@ -310,7 +328,7 @@ def sync() -> bool:
         ):
             force_push()
         elif cmd.confirm(f"{Cmd.PULL} your origin branch?"):
-            if not rebase_or_reset(my_origin.commit, find_base(MY, my_origin)):
+            if not rebase_or_conflict(my_origin.commit, find_base(MY, my_origin)):
                 cmd.cancel()
                 return False
         else:
@@ -335,14 +353,14 @@ def rebase() -> None:
         env()
         push()
     else:
-        rebase_or_reset(MASTER.commit, base)
+        rebase_or_conflict(MASTER.commit, base)
 
 
-@app.command()
-def merge() -> None:
-    if not sync():
-        return
-    MY.merge(MASTER)
+# @app.command()
+# def merge() -> None:
+#     if not sync():
+#         return
+#     MY.merge(MASTER)
 
 
 def stash_push() -> str:
