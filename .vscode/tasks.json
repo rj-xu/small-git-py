@@ -1,0 +1,37 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🔄️ Sync 同步：使本地分支和远程分支保持一致",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py sync"
+        },
+        {
+            "label": "🌳 Rebase 变基：更新个人分支的基点",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py rebase"
+        },
+        {
+            "label": "🪓 Reset 重置：保留当前代码，使个人分支回到基点",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py reset"
+        },
+        {
+            "label": "⏫ Force Push 强制推送：覆盖远程分支",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py force-push"
+        },
+        {
+            "label": "🔨 Squash 压缩：将个人分支上的所有提交压缩成一个",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py squash"
+        },
+        {
+            "label": "📦 Submodule 恢复子模块：恢复子模块的所有修改",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py submod"
+        },
+    ],
+}
