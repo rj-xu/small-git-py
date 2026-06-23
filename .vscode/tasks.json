@@ -4,6 +4,11 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "⚡ Fast Start 快速开始",
+            "type": "shell",
+            "command": "./scripts/fast_start.ps1"
+        },
+        {
             "label": "🔄️ Sync 同步：使本地分支和远程分支保持一致",
             "type": "shell",
             "command": "uv run scripts/small_git.py sync"
@@ -26,12 +31,27 @@
         {
             "label": "🔨 Squash 压缩：将个人分支上的所有提交压缩成一个",
             "type": "shell",
-            "command": "uv run scripts/small_git.py squash"
+            "command": "uv run scripts/small_git.py merge"
         },
         {
-            "label": "📦 Submodule 恢复子模块：恢复子模块的所有修改",
+            "label": "🧹 Tidy 清理：提交 MR 前执行",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py tidy"
+        },
+        {
+            "label": "🔀 Merge 合并：将主分支的更新合并到个人分支",
+            "type": "shell",
+            "command": "uv run scripts/small_git.py merge"
+        },
+        {
+            "label": "📦 Submodule 恢复子模块：丢弃本地对子模块的所有修改",
             "type": "shell",
             "command": "uv run scripts/small_git.py submod"
+        },
+        {
+            "label": "🌏 Env 更新开发环境",
+            "type": "shell",
+            "command": "uv run scripts/small-git.py env"
         },
     ],
 }

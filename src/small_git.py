@@ -12,7 +12,7 @@ HAS_SUBMOD = True
 app = typer.Typer()
 
 REPO = git.Repo(".")
-assert not REPO.index.unmerged_blobs()
+# assert not REPO.index.unmerged_blobs()
 
 
 assert "origin" in REPO.remotes
@@ -31,7 +31,7 @@ def get_user_email() -> str:
 
 def find_base(b0: git.Head = MY, b1: git.Head = MASTER) -> git.Commit:
     bases = REPO.merge_base(b0, b1)
-    assert len(bases) == 1
+    # assert len(bases) == 1
     return bases[0]
 
 
@@ -50,9 +50,7 @@ def count_commits(c0: git.Commit, c1: git.Commit) -> int:
 
 
 def find_my_1st_commit_after_base(base: git.Commit) -> git.Commit:
-    return REPO.commit(
-        REPO.git.rev_list(f"{base}..{MY}", reverse=True, max_count="1").strip()
-    )
+    return REPO.commit(REPO.git.rev_list(f"{base}..{MY}", reverse=True, max_count="1").strip())
 
 
 class Cmd(StrEnum):
@@ -68,10 +66,13 @@ class Cmd(StrEnum):
     MERGE      = "🔀 Merge"
     FETCH      = "⏬ Fetch"
     SYNC       = "🔄️ Sync"
+    BRANCH     = "📂 Branch"
     TAG        = "🏷️ Tag"
     STASH_PUSH = "🗃️ Stash Push"
     STASH_POP  = "🗃️ Stash Pop"
     SUBMOD     = "📦 SubMod"
+    MR         = "🙋🏼‍♂️ Merge Request"
+    TIDY       = "🧹 Tidy"
     ENV        = "🌏 Env"
     # fmt: on
 
@@ -121,7 +122,8 @@ def commit(msg: str) -> None:
 def pull() -> None:
     cmd = Cmd.PULL
     cmd.start()
-    ORIGIN.pull(ff_only=True)
+    ORIGIN.pull()
+    # ORIGIN.pull(ff_only=True)
     cmd.end()
 
 
@@ -154,7 +156,7 @@ def force_push() -> None:
 
 
 def reset_to(
-    c: git.Commit | None = None, *, need_commit: bool, need_push: bool
+    c: git.Commit | git.Reference | None = None, *, is_soft: bool = False, need_commit: bool, need_push: bool
 ) -> None:
     if c is None:
         c = find_base()
@@ -164,7 +166,10 @@ def reset_to(
 
     cmd = Cmd.RESET
     cmd.start()
-    REPO.git.reset(c, mixed=True)
+    if is_soft:
+        REPO.git.reset(c, soft=True)
+    else:
+        REPO.git.reset(c, mixed=True)
     cmd.end()
 
     if need_commit:
@@ -217,42 +222,49 @@ def rebase_to(c: git.Commit) -> bool:
         cmd.fail()
         return False
     else:
+        cmd.end()
+
         force_push()
         submod()
         env()
 
-        cmd.end()
         return True
 
 
-def tag(name: str):
+def add_tag(name: str):
     cmd = Cmd.TAG
     cmd.start()
     REPO.create_tag(name, force=True)
     cmd.end()
 
 
-def rebase_or_reset(c: git.Commit, base: git.Commit) -> bool:
+def create_branch(name: str):
+    cmd = Cmd.BRANCH
+    cmd.start()
+    REPO.create_head(name, force=True)
+    cmd.end()
+
+
+def rebase_and_retry(c: git.Commit, base: git.Commit) -> bool:
     cmd = Cmd.REBASE
 
     if rebase_to(c):
         return True
     abort()
 
-    if not cmd.confirm(
-        f"Found 💣 conflicts. Do you want to {Cmd.RESET} and {Cmd.REBASE}?"
-    ):
+    if not cmd.confirm(f"Found 💣 conflicts. Do you want to {Cmd.RESET} and {Cmd.REBASE}?"):
         cmd.cancel()
         return False
 
-    tag(f"{MY.name}-backup")
-    submod()
-    reset_to(base, need_commit=True, need_push=False)
+    add_tag(f"{MY.name}-backup-{base.hexsha[:8]}")
+    merge()
 
-    if not rebase_to(c):
-        ORIGIN.push(MY.name, delete=True)
-        cmd.warn(f"Please resolve 💣 conflicts manually, then {Cmd.REBASE}")
-        return False
+    # reset_to(base, need_commit=True, need_push=False)
+    # submod()
+    # if not rebase_to(c):
+    #     ORIGIN.push(MY.name, delete=True)
+    #     cmd.warn(f"Please resolve 💣 conflicts manually, then {Cmd.REBASE}")
+    #     return False
     return True
 
 
@@ -294,17 +306,18 @@ def sync() -> bool:
     elif my_ahead > 0 and my_origin_ahead > 0:
         cmd.warn("Found 🍴 Fork")
 
-        if (
-            base.committed_datetime > find_base(my_origin, MASTER).committed_datetime
-        ) and (cmd.confirm(f"{Cmd.FORCE_PUSH} your branch?")):
+        if (base.committed_datetime > find_base(my_origin, MASTER).committed_datetime) and (
+            cmd.confirm(f"{Cmd.FORCE_PUSH} your branch?")
+        ):
             cmd.warn(f"You need to {Cmd.FORCE_PUSH} manually")
             cmd.cancel()
             return False
 
-        if cmd.confirm(f"{Cmd.REBASE} to your origin branch?"):
-            if not rebase_or_reset(my_origin.commit, find_base(MY, my_origin)):
-                cmd.cancel()
-                return False
+        if cmd.confirm(f"{Cmd.PULL} to your origin branch?"):
+            # if not rebase_and_retry(my_origin.commit, find_base(MY, my_origin)):
+            #     cmd.cancel()
+            #     return False
+            pull()
         else:
             cmd.warn(f"You need to choose {Cmd.FORCE_PUSH} or {Cmd.REBASE}")
             cmd.cancel()
@@ -335,36 +348,50 @@ def rebase() -> None:
             cmd.cancel()
             return
 
-        rebase_or_reset(MASTER.commit, base)
+        rebase_and_retry(MASTER.commit, base)
 
 
 @app.command()
-def test():
-    email = find_my_1st_commit_after_base(find_base()).author.email
-    print(email)
-
-
-@app.command()
-def merge() -> None:
-    if not sync():
+def merge(need_sync: bool = True) -> None:  # noqa: FBT001, FBT002
+    if need_sync and not sync():
         return
+
     cmd = Cmd.MERGE
     cmd.start()
-    MY.merge(MASTER)
+    REPO.git.merge(MASTER)
     cmd.end()
+
+    submod()
+    env()
+    push()
+
+
+@app.command()
+def tidy() -> None:
+    cmd = Cmd.TIDY
+    cmd.start()
+    merge()
+    reset_to(MASTER, need_commit=False, need_push=True)
+    cmd.end()
+
+
+@app.command()
+def mr() -> None:
+    merge()
+    reset_to(MASTER, need_commit=False, need_push=True)
 
 
 def stash_push() -> None:
     cmd = Cmd.STASH_PUSH
     cmd.start()
-    REPO.git.stash("push", include_untracked=True)
+    REPO.git.stash("push", "--include-untracked")
     cmd.end()
 
 
 def stash_pop() -> None:
     cmd = Cmd.STASH_POP
     cmd.start()
-    REPO.git.stash("pop", index=True)
+    REPO.git.stash("pop", "--index")
     cmd.end()
 
 
@@ -375,7 +402,7 @@ def submod() -> None:
 
     cmd = Cmd.SUBMOD
     cmd.start()
-    REPO.git.submodule("update", init=True, recursive=True, force=True)
+    REPO.git.submodule("update", "--init", "--recursive", "--force")
     cmd.end()
 
 
@@ -385,6 +412,12 @@ def env() -> None:
     cmd.start()
     subprocess.run(["uv", "sync"], check=True)  # noqa: S607
     cmd.end()
+
+
+@app.command()
+def test():
+    email = find_my_1st_commit_after_base(find_base()).author.email
+    print(email)
 
 
 @app.command()
